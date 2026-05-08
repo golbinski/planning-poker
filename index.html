@@ -637,6 +637,7 @@ function handleClientMessage(pid, msg) {
 function handleHostMessage(msg) {
   if (msg.type === 'state') {
     state = msg.state;
+    if (!state.votes[myId]) myVote = null;
     renderGame();
     document.getElementById('story-name').value = state.story || '';
   }
