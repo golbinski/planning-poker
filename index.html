@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planning Poker</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  :root {
+    --bg: #100e0c;
+    --bg2: #1a1612;
+    --bg3: #231e18;
+    --border: rgba(255,220,170,0.07);
+    --border2: rgba(255,220,170,0.14);
+    --text: #f0ebe3;
+    --muted: #9a8f7e;
+    --accent: #e8952a;
+    --accent2: #c97820;
+    --success: #4caf82;
+    --warn: #e8952a;
+    --card-unselected: #231e18;
+    --card-hover: #2e2720;
+    --card-selected: #e8952a;
+    --card-selected-text: #100e0c;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 2rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .status-pill {
+    font-size: 0.75rem;
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+  .dot.connected { background: var(--success); }
+
+  /* ── SCREENS ── */
+  .screen { display: none; }
+  .screen.active { display: flex; flex-direction: column; flex: 1; }
+
+  /* ── LOBBY ── */
+  #lobby {
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    padding: 3rem 1rem;
+  }
+  .lobby-inner {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .lobby-inner h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    line-height: 1.1;
+  }
+  .lobby-inner h1 span { color: var(--accent); }
+  .lobby-inner p { color: var(--muted); font-size: 0.95rem; line-height: 1.6; }
+
+  .divider {
+    display: flex; align-items: center; gap: 1rem;
+    color: var(--muted); font-size: 0.8rem;
+  }
+  .divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .input-group { display: flex; flex-direction: column; gap: 6px; }
+  label { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  input[type="text"] {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 0.95rem;
+    padding: 0.7rem 1rem;
+    outline: none;
+    transition: border-color 0.15s;
+    width: 100%;
+  }
+  input[type="text"]:focus { border-color: var(--accent); }
+  input[type="text"]::placeholder { color: var(--muted); }
+
+  .btn {
+    padding: 0.75rem 1.5rem;
+    border-radius: var(--radius-sm);
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--text);
+  }
+  .btn-outline:hover { background: var(--bg3); }
+  .btn-danger {
+    background: transparent;
+    border: 1px solid rgba(239,68,68,0.3);
+    color: #f87171;
+  }
+  .btn-danger:hover { background: rgba(239,68,68,0.08); }
+
+  /* ── GAME LAYOUT ── */
+  #game { flex-direction: row; overflow: hidden; height: calc(100vh - 57px); }
+
+  .sidebar {
+    width: 240px;
+    min-width: 200px;
+    border-right: 1px solid var(--border);
+    background: var(--bg2);
+    display: flex;
+    flex-direction: column;
+    padding: 1.25rem;
+    gap: 1rem;
+    overflow-y: auto;
+  }
+  .sidebar h3 {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
+
+  .player-list { display: flex; flex-direction: column; gap: 6px; }
+  .player-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--bg3);
+    font-size: 0.875rem;
+    position: relative;
+  }
+  .player-avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .player-name { flex: 1; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vote-badge {
+    width: 26px; height: 26px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .vote-badge.waiting { background: var(--bg); color: var(--muted); }
+  .vote-badge.voted { background: var(--success); color: #0a2e1c; }
+  .vote-badge.revealed { background: var(--accent); color: #fff; }
+
+  .sidebar-invite {
+    background: var(--bg3);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .invite-id {
+    font-family: 'SF Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--accent);
+    word-break: break-all;
+    margin-top: 4px;
+  }
+  .copy-btn {
+    margin-top: 8px;
+    width: 100%;
+    padding: 6px;
+    font-size: 0.75rem;
+  }
+
+  /* ── MAIN GAME AREA ── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .game-header {
+    padding: 1.25rem 2rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: var(--bg2);
+    flex-wrap: wrap;
+  }
+  .story-input-wrap { flex: 1; min-width: 200px; }
+  .story-input-wrap input { background: var(--bg3); width: 100%; }
+
+  .game-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    padding: 2rem;
+    overflow-y: auto;
+  }
+
+  /* ── RESULT ── */
+  .result-area {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .result-label { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .result-value {
+    font-size: 4rem;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .result-breakdown {
+    display: flex; gap: 8px; margin-top: 0.5rem; flex-wrap: wrap; justify-content: center;
+  }
+  .breakdown-chip {
+    padding: 4px 12px;
+    border-radius: 20px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .breakdown-chip strong { color: var(--text); }
+
+  /* ── CARD DECK ── */
+  .deck-label { font-size: 0.8rem; color: var(--muted); align-self: flex-start; text-transform: uppercase; letter-spacing: 0.06em; }
+  .deck {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    max-width: 700px;
+  }
+  .card {
+    width: 68px; height: 96px;
+    border-radius: 10px;
+    border: 1.5px solid var(--border2);
+    background: var(--card-unselected);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.12s;
+    position: relative;
+    user-select: none;
+    color: var(--text);
+  }
+  .card:hover { background: var(--card-hover); transform: translateY(-4px); border-color: var(--accent); }
+  .card.selected {
+    background: var(--card-selected);
+    border-color: var(--card-selected);
+    color: var(--card-selected-text);
+    transform: translateY(-8px);
+    box-shadow: 0 8px 24px rgba(91,124,250,0.35);
+  }
+  .card.disabled { pointer-events: none; opacity: 0.5; }
+
+  /* ── ACTION STRIP ── */
+  .actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    bottom: 2rem; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    opacity: 0;
+    transition: all 0.25s;
+    pointer-events: none;
+    z-index: 999;
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── JOIN MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 100;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius);
+    padding: 2rem;
+    width: 100%; max-width: 400px;
+    display: flex; flex-direction: column; gap: 1.25rem;
+  }
+  .modal h2 { font-size: 1.25rem; font-weight: 700; }
+  .modal p { font-size: 0.875rem; color: var(--muted); line-height: 1.5; }
+
+  /* ── CONNECTING ── */
+  .connecting { text-align: center; color: var(--muted); font-size: 0.875rem; }
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: inline-block; margin-right: 8px; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 600px) {
+    .sidebar { display: none; }
+    .game-header { padding: 0.75rem 1rem; }
+    header { padding: 0.75rem 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🃏</div>
+    Planning Poker
+  </div>
+  <div class="status-pill">
+    <div class="dot" id="conn-dot"></div>
+    <span id="conn-label">Offline</span>
+  </div>
+</header>
+
+<!-- LOBBY -->
+<div class="screen active" id="lobby">
+  <div class="lobby-inner">
+    <div>
+      <h1>Plan your sprint<br><span>together.</span></h1>
+      <p style="margin-top:0.5rem">P2P planning poker — no server required. Create a room and share the link, or join with a Room ID.</p>
+    </div>
+
+    <div class="input-group">
+      <label>Your name</label>
+      <input type="text" id="input-name" placeholder="e.g. Gracjan" maxlength="24" />
+    </div>
+
+    <button class="btn btn-primary" onclick="createRoom()">
+      ✦ Create new room
+    </button>
+
+    <div class="divider">or join existing</div>
+
+    <div class="input-group">
+      <label>Room ID</label>
+      <input type="text" id="input-room-id" placeholder="Paste room ID here…" />
+    </div>
+    <button class="btn btn-outline" onclick="showJoinModal()">
+      → Join room
+    </button>
+
+    <p id="lobby-error" style="color:#f87171;font-size:0.85rem;display:none"></p>
+  </div>
+</div>
+
+<!-- GAME -->
+<div class="screen" id="game">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <h3>Players</h3>
+    <div class="player-list" id="player-list"></div>
+
+    <div style="flex:1"></div>
+
+    <div id="invite-section" class="sidebar-invite" style="display:none">
+      <div>Room ID:</div>
+      <div class="invite-id" id="room-id-display"></div>
+      <button class="btn btn-outline copy-btn" onclick="copyRoomId()">Copy ID</button>
+    </div>
+
+    <button class="btn btn-danger" onclick="leaveRoom()">Leave room</button>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="game-header">
+      <div class="story-input-wrap">
+        <input type="text" id="story-name" placeholder="Story / task name…" oninput="broadcastStory()" />
+      </div>
+      <button class="btn btn-outline" id="btn-reveal" onclick="revealVotes()" style="display:none">Reveal votes</button>
+      <button class="btn btn-outline" id="btn-reset" onclick="resetRound()" style="display:none">New round</button>
+    </div>
+
+    <div class="game-body">
+      <div class="result-area" id="result-area" style="display:none">
+        <div class="result-label">Average</div>
+        <div class="result-value" id="result-avg">—</div>
+        <div class="result-breakdown" id="result-breakdown"></div>
+      </div>
+
+      <div>
+        <div class="deck-label" style="margin-bottom:8px">Pick your estimate</div>
+        <div class="deck" id="deck"></div>
+      </div>
+
+      <div class="actions" id="action-strip"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Join confirm modal -->
+<div class="modal-overlay" id="join-modal">
+  <div class="modal">
+    <h2>Join a room</h2>
+    <p>Make sure you have a name set, then enter the Room ID shared by the host.</p>
+    <div class="input-group">
+      <label>Room ID</label>
+      <input type="text" id="modal-room-id" placeholder="Paste room ID…" />
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-outline" style="flex:1" onclick="closeJoinModal()">Cancel</button>
+      <button class="btn btn-primary" style="flex:1" onclick="joinRoom()">Join →</button>
+    </div>
+    <p id="join-error" style="color:#f87171;font-size:0.85rem;display:none"></p>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const CARDS = ['1','2','3','5','8','13','21','?'];
+
+// ── STATE ──
+let peer = null;
+let myId = '';
+let myName = '';
+let isHost = false;
+let connections = {};   // peerId → DataConnection (host side)
+let hostConn = null;    // client → host connection
+
+// Shared state (host authoritative)
+let state = {
+  players: {},       // peerId → { name, voted }
+  votes: {},         // peerId → card value (hidden until revealed)
+  revealed: false,
+  story: '',
+};
+
+let myVote = null;
+
+// ── PEER INIT ──
+function initPeer(id) {
+  return new Promise((resolve, reject) => {
+    const p = id ? new Peer(id) : new Peer();
+    p.on('open', pid => { myId = pid; resolve(p); });
+    p.on('error', err => reject(err));
+  });
+}
+
+// ── CREATE ROOM (host) ──
+async function createRoom() {
+  const name = document.getElementById('input-name').value.trim();
+  if (!name) { showLobbyError('Enter your name first.'); return; }
+  myName = name;
+  isHost = true;
+
+  try {
+    peer = await initPeer();
+    setConnStatus(true);
+
+    // Init state with self
+    state.players[myId] = { name: myName, voted: false };
+
+    peer.on('connection', conn => handleIncomingConn(conn));
+
+    goToGame();
+  } catch(e) {
+    showLobbyError('Could not create room: ' + e.message);
+  }
+}
+
+// ── JOIN ROOM (client) ──
+function showJoinModal() {
+  const rid = document.getElementById('input-room-id').value.trim();
+  if (rid) document.getElementById('modal-room-id').value = rid;
+  document.getElementById('join-modal').classList.add('open');
+}
+function closeJoinModal() {
+  document.getElementById('join-modal').classList.remove('open');
+}
+
+async function joinRoom() {
+  const name = document.getElementById('input-name').value.trim();
+  const roomId = (document.getElementById('modal-room-id').value || document.getElementById('input-room-id').value).trim();
+
+  if (!name) { showJoinError('Enter your name.'); return; }
+  if (!roomId) { showJoinError('Enter a Room ID.'); return; }
+
+  myName = name;
+  isHost = false;
+
+  try {
+    peer = await initPeer();
+    setConnStatus(true);
+    closeJoinModal();
+    goToGame();
+
+    hostConn = peer.connect(roomId, { metadata: { name: myName } });
+    hostConn.on('open', () => {
+      send(hostConn, { type: 'join', name: myName });
+    });
+    hostConn.on('data', msg => handleHostMessage(msg));
+    hostConn.on('close', () => { toast('Disconnected from host'); leaveRoom(); });
+    hostConn.on('error', e => toast('Connection error: ' + e));
+
+  } catch(e) {
+    showLobbyError('Could not connect: ' + e.message);
+  }
+}
+
+// ── HOST: handle incoming connections ──
+function handleIncomingConn(conn) {
+  const pid = conn.peer;
+  conn.on('open', () => {
+    connections[pid] = conn;
+    toast(`${conn.metadata?.name || 'Someone'} connected`);
+  });
+  conn.on('data', msg => handleClientMessage(pid, msg));
+  conn.on('close', () => {
+    delete connections[pid];
+    delete state.players[pid];
+    delete state.votes[pid];
+    broadcastState();
+    renderGame();
+  });
+}
+
+function handleClientMessage(pid, msg) {
+  switch(msg.type) {
+    case 'join':
+      state.players[pid] = { name: msg.name, voted: false };
+      broadcastState();
+      renderGame();
+      break;
+    case 'vote':
+      state.votes[pid] = msg.value;
+      state.players[pid].voted = true;
+      broadcastState();
+      renderGame();
+      break;
+    case 'story':
+      state.story = msg.story;
+      document.getElementById('story-name').value = state.story;
+      broadcastState();
+      break;
+    case 'reveal':
+      if (!isHost) break;
+      doReveal();
+      break;
+    case 'reset':
+      if (!isHost) break;
+      doReset();
+      break;
+  }
+}
+
+function handleHostMessage(msg) {
+  if (msg.type === 'state') {
+    state = msg.state;
+    renderGame();
+    document.getElementById('story-name').value = state.story || '';
+  }
+}
+
+// ── MESSAGING ──
+function send(conn, msg) {
+  if (conn && conn.open) conn.send(msg);
+}
+
+function broadcastState() {
+  // host sends full state to all clients
+  if (!isHost) return;
+  const pkg = { type: 'state', state };
+  for (const conn of Object.values(connections)) send(conn, pkg);
+  renderGame();
+}
+
+function broadcastStory() {
+  const s = document.getElementById('story-name').value;
+  if (isHost) {
+    state.story = s;
+    broadcastState();
+  } else {
+    send(hostConn, { type: 'story', story: s });
+  }
+}
+
+// ── VOTING ──
+function vote(val) {
+  if (state.revealed) return;
+  myVote = val;
+  if (isHost) {
+    state.votes[myId] = val;
+    state.players[myId].voted = true;
+    broadcastState();
+  } else {
+    send(hostConn, { type: 'vote', value: val });
+    // Optimistic local
+    state.players[myId] = state.players[myId] || { name: myName, voted: true };
+    state.players[myId].voted = true;
+  }
+  renderDeck();
+  renderPlayers();
+}
+
+function revealVotes() {
+  if (isHost) doReveal();
+  else send(hostConn, { type: 'reveal' });
+}
+function doReveal() {
+  state.revealed = true;
+  broadcastState();
+  renderGame();
+}
+
+function resetRound() {
+  if (isHost) doReset();
+  else send(hostConn, { type: 'reset' });
+}
+function doReset() {
+  state.votes = {};
+  state.revealed = false;
+  for (const pid of Object.keys(state.players)) state.players[pid].voted = false;
+  myVote = null;
+  broadcastState();
+  renderGame();
+}
+
+// ── RENDER ──
+function renderGame() {
+  renderPlayers();
+  renderDeck();
+  renderResult();
+  renderControls();
+}
+
+function renderPlayers() {
+  const list = document.getElementById('player-list');
+  const allPlayers = { ...state.players };
+  // Ensure self always shown
+  if (!allPlayers[myId]) allPlayers[myId] = { name: myName, voted: !!myVote };
+
+  list.innerHTML = Object.entries(allPlayers).map(([pid, p]) => {
+    const initials = (p.name || '?').slice(0,2).toUpperCase();
+    const isMe = pid === myId;
+    let badge = '';
+    const voted = pid === myId ? !!myVote : p.voted;
+    if (state.revealed) {
+      const v = pid === myId ? myVote : state.votes[pid];
+      badge = `<div class="vote-badge revealed">${v || '—'}</div>`;
+    } else if (voted) {
+      badge = `<div class="vote-badge voted">✓</div>`;
+    } else {
+      badge = `<div class="vote-badge waiting">…</div>`;
+    }
+    return `<div class="player-item">
+      <div class="player-avatar">${initials}</div>
+      <div class="player-name">${p.name}${isMe ? ' (you)' : ''}</div>
+      ${badge}
+    </div>`;
+  }).join('');
+}
+
+function renderDeck() {
+  const deck = document.getElementById('deck');
+  deck.innerHTML = CARDS.map(c => {
+    const sel = myVote === c ? 'selected' : '';
+    const dis = state.revealed ? 'disabled' : '';
+    return `<div class="card ${sel} ${dis}" onclick="vote('${c}')">${c}</div>`;
+  }).join('');
+}
+
+function renderResult() {
+  const area = document.getElementById('result-area');
+  if (!state.revealed) { area.style.display = 'none'; return; }
+
+  const votes = Object.values(state.votes).filter(v => v !== '?');
+  const nums = votes.map(Number).filter(n => !isNaN(n));
+  const avg = nums.length ? (nums.reduce((a,b)=>a+b,0)/nums.length) : null;
+
+  area.style.display = 'flex';
+  document.getElementById('result-avg').textContent = avg !== null ? avg.toFixed(1) : '?';
+
+  // Breakdown
+  const counts = {};
+  Object.values(state.votes).forEach(v => { counts[v] = (counts[v]||0)+1; });
+  document.getElementById('result-breakdown').innerHTML =
+    Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([v,c])=>
+      `<div class="breakdown-chip"><strong>${v}</strong> ×${c}</div>`
+    ).join('');
+}
+
+function renderControls() {
+  const btnReveal = document.getElementById('btn-reveal');
+  const btnReset = document.getElementById('btn-reset');
+
+  const allVoted = Object.values(state.players).every(p => p.voted);
+
+  if (state.revealed) {
+    btnReveal.style.display = 'none';
+    btnReset.style.display = '';
+  } else {
+    btnReveal.style.display = allVoted ? '' : 'none';
+    btnReset.style.display = '';
+  }
+}
+
+// ── NAVIGATION ──
+function goToGame() {
+  document.getElementById('lobby').classList.remove('active');
+  document.getElementById('game').classList.add('active');
+
+  if (isHost) {
+    document.getElementById('invite-section').style.display = '';
+    document.getElementById('room-id-display').textContent = myId;
+    document.getElementById('btn-reveal').style.display = 'none';
+    document.getElementById('btn-reset').style.display = '';
+  }
+
+  renderGame();
+}
+
+function leaveRoom() {
+  if (peer) peer.destroy();
+  peer = null; myId = ''; myVote = null; isHost = false;
+  connections = {}; hostConn = null;
+  state = { players: {}, votes: {}, revealed: false, story: '' };
+
+  document.getElementById('game').classList.remove('active');
+  document.getElementById('lobby').classList.add('active');
+  setConnStatus(false);
+}
+
+// ── UTILS ──
+function setConnStatus(on) {
+  document.getElementById('conn-dot').className = 'dot' + (on ? ' connected' : '');
+  document.getElementById('conn-label').textContent = on ? 'Connected' : 'Offline';
+}
+
+function copyRoomId() {
+  navigator.clipboard.writeText(myId).then(() => toast('Room ID copied!'));
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+function showLobbyError(msg) {
+  const el = document.getElementById('lobby-error');
+  el.textContent = msg; el.style.display = '';
+  setTimeout(() => el.style.display = 'none', 4000);
+}
+function showJoinError(msg) {
+  const el = document.getElementById('join-error');
+  el.textContent = msg; el.style.display = '';
+}
+
+// Pre-fill name from URL params (for shared links)
+const params = new URLSearchParams(location.search);
+if (params.get('room')) document.getElementById('input-room-id').value = params.get('room');
+</script>
+</body>
+</html>
