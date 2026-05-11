@@ -415,17 +415,23 @@
       <input type="text" id="input-name" placeholder="e.g. Gracjan" maxlength="24" />
     </div>
 
-    <button class="btn btn-primary" onclick="createRoom()">
-      ✦ Create new room
-    </button>
+    <div id="invited-banner" style="display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:12px 16px;font-size:0.875rem;color:var(--muted);line-height:1.5">
+      <span style="color:var(--accent)">✦</span> You've been invited to a room. Enter your name below to join.
+    </div>
 
-    <div class="divider">or join existing</div>
+    <div id="create-section">
+      <button class="btn btn-primary" onclick="createRoom()">
+        ✦ Create new room
+      </button>
+    </div>
 
-    <div class="input-group">
+    <div id="divider-section" class="divider">or join existing</div>
+
+    <div id="room-id-section" class="input-group">
       <label>Room ID</label>
       <input type="text" id="input-room-id" placeholder="Paste room ID here…" />
     </div>
-    <button class="btn btn-outline" onclick="showJoinModal()">
+    <button class="btn btn-outline" id="join-btn" onclick="showJoinModal()">
       → Join room
     </button>
 
@@ -445,7 +451,7 @@
     <div id="invite-section" class="sidebar-invite" style="display:none">
       <div>Room ID:</div>
       <div class="invite-id" id="room-id-display"></div>
-      <button class="btn btn-outline copy-btn" onclick="copyRoomId()">Copy ID</button>
+      <button class="btn btn-outline copy-btn" onclick="copyRoomId()">Copy link</button>
     </div>
 
     <button class="btn btn-danger" onclick="leaveRoom()">Leave room</button>
@@ -543,6 +549,7 @@ async function createRoom() {
 
     peer.on('connection', conn => handleIncomingConn(conn));
 
+    history.replaceState(null, '', '?room=' + myId);
     goToGame();
   } catch(e) {
     showLobbyError('Could not create room: ' + e.message);
@@ -810,6 +817,7 @@ function leaveRoom() {
   document.getElementById('game').classList.remove('active');
   document.getElementById('lobby').classList.add('active');
   setConnStatus(false);
+  history.replaceState(null, '', location.pathname);
 }
 
 // ── UTILS ──
@@ -819,7 +827,7 @@ function setConnStatus(on) {
 }
 
 function copyRoomId() {
-  navigator.clipboard.writeText(myId).then(() => toast('Room ID copied!'));
+  navigator.clipboard.writeText(location.href).then(() => toast('Link copied!'));
 }
 
 function toast(msg) {
@@ -839,9 +847,20 @@ function showJoinError(msg) {
   el.textContent = msg; el.style.display = '';
 }
 
-// Pre-fill name from URL params (for shared links)
+// Invite link handling
 const params = new URLSearchParams(location.search);
-if (params.get('room')) document.getElementById('input-room-id').value = params.get('room');
+const inviteRoom = params.get('room');
+if (inviteRoom) {
+  document.getElementById('input-room-id').value = inviteRoom;
+  document.getElementById('invited-banner').style.display = '';
+  document.getElementById('create-section').style.display = 'none';
+  document.getElementById('divider-section').style.display = 'none';
+  document.getElementById('room-id-section').style.display = 'none';
+  const joinBtn = document.getElementById('join-btn');
+  joinBtn.classList.replace('btn-outline', 'btn-primary');
+  joinBtn.onclick = joinRoom;
+  document.getElementById('input-name').focus();
+}
 </script>
 </body>
 </html>
