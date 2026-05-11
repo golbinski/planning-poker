@@ -545,6 +545,7 @@ async function createRoom() {
     setConnStatus(true);
 
     // Init state with self
+    state.hostId = myId;
     state.players[myId] = { name: myName, voted: false };
 
     peer.on('connection', conn => handleIncomingConn(conn));
@@ -741,9 +742,10 @@ function renderPlayers() {
     } else {
       badge = `<div class="vote-badge waiting">…</div>`;
     }
+    const hostTag = pid === state.hostId ? ' <span style="font-size:0.65rem;color:var(--accent);opacity:0.8">host</span>' : '';
     return `<div class="player-item">
       <div class="player-avatar">${initials}</div>
-      <div class="player-name">${p.name}${isMe ? ' (you)' : ''}</div>
+      <div class="player-name">${p.name}${isMe ? ' (you)' : ''}${hostTag}</div>
       ${badge}
     </div>`;
   }).join('');
@@ -788,7 +790,7 @@ function renderControls() {
     btnReveal.style.display = 'none';
     btnReset.style.display = '';
   } else {
-    btnReveal.style.display = allVoted ? '' : 'none';
+    btnReveal.style.display = (allVoted || isHost) ? '' : 'none';
     btnReset.style.display = '';
   }
 }
